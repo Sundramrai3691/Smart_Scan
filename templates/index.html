@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Powered Object Detection</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://kit.fontawesome.com/your-font-awesome-kit.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="animate__animated animate__fadeInDown">SmartScan</h1>
+            <nav>
+                <ul>
+                    <li><a href="#">Home</a></li>
+                    <li><a href="#">About</a></li>
+                    <li><a href="#">Contact</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        <main class="main-content">
+            <section id="upload-section" class="animate__animated animate__fadeInUp">
+                <h2>Upload Image</h2>
+                <form id="upload-form" enctype="multipart/form-data">
+                    <div class="file-upload">
+                        <input type="file" id="image-upload" name="image" accept="image/*" required>
+                        <label for="image-upload" class="upload-label">
+                            <i class="fas fa-cloud-upload-alt"></i> Choose Image
+                        </label>
+                        <span id="file-name">No file chosen</span>
+                    </div>
+
+                    <div class="mode-selection">
+                        <label for="mode">Detection Mode:</label>
+                        <select id="mode" name="mode">
+                            <option value="product">Product Detection</option>
+                            <option value="fruit">Fruit Quality Detection</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="detect-button">
+                        <i class="fas fa-search"></i> Detect
+                    </button>
+                </form>
+            </section>
+
+            <section id="processing-section" class="animate__animated animate__fadeIn" style="display: none;">
+                <div class="processing-spinner"></div>
+                <p>Processing...</p>
+            </section>
+
+            <section id="results-section" class="animate__animated animate__fadeIn" style="display: none;">
+                <h2>Detection Results</h2>
+
+                <div class="image-display">
+                    <h3>Uploaded Image:</h3>
+                    <img id="uploaded-image" src="" alt="Uploaded Image" class="displayed-image">
+
+                    <h3>Detected Image:</h3>
+                    <img id="detected-image" src="" alt="Detected Image" class="displayed-image">
+                </div>
+
+                <div id="product-results" style="display: none;">
+                    <h3>Detected Product:</h3>
+                    <div id="product-class"></div>
+                    <div class="graph-display">
+                        <h3>Confidence Graph:</h3>
+                        <img id="confidence-graph" src="" alt="Confidence Graph">
+                    </div>
+                    <h3>Detected Text (OCR):</h3>
+                    <div id="ocr-text"></div>
+                </div>
+
+                <div id="fruit-results" style="display: none;">
+                    <h3>Fruit Quality Assessment:</h3>
+                    <div id="fruit-quality"></div>
+                </div>
+
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>&copy; 2025 SmartScan. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        const form = document.getElementById('upload-form');
+        const uploadSection = document.getElementById('upload-section');
+        const processingSection = document.getElementById('processing-section');
+        const resultsSection = document.getElementById('results-section');
+        const uploadedImage = document.getElementById('uploaded-image');
+        const detectedImage = document.getElementById('detected-image');
+        const confidenceGraph = document.getElementById('confidence-graph');
+        const ocrText = document.getElementById('ocr-text');
+        const productResults = document.getElementById('product-results');
+        const fruitResults = document.getElementById('fruit-results');
+        const fileNameSpan = document.getElementById('file-name');
+        const productClassDiv = document.getElementById('product-class');
+        const fruitQualityDiv = document.getElementById('fruit-quality');
+
+
+        const fileInput = document.getElementById('image-upload');
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileNameSpan.textContent = `Selected: ${fileInput.files[0].name}`;
+            } else {
+                fileNameSpan.textContent = 'No file chosen';
+            }
+        });
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(form);
+            const mode = document.getElementById('mode').value;
+
+            uploadSection.style.display = 'none';
+            processingSection.style.display = 'block';
+            resultsSection.style.display = 'none';
+
+            try {
+                const response = await fetch('/detect', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const data = await response.json();
+
+                if (data.detections) {
+                    processingSection.style.display = 'none';
+                    resultsSection.style.display = 'block';
+
+                    uploadedImage.src = URL.createObjectURL(formData.get("image"));
+                    detectedImage.src = data.image_url;
+                    confidenceGraph.src = data.graph_url;
+                    ocrText.textContent = data.ocr_text || "No text detected";
+
+                    uploadedImage.onload = function () {
+                        const width = uploadedImage.width;
+                        const height = uploadedImage.height;
+                        detectedImage.width = width;
+                        detectedImage.height = height;
+                    };
+
+                    productResults.style.display = mode === 'product' ? 'block' : 'none';
+                    fruitResults.style.display = mode === 'fruit' ? 'block' : 'none';
+
+                    if (mode === 'product') {
+                        productClassDiv.textContent = data.detections.map(d => d.class).join(', ');
+                        productClassDiv.style.fontWeight = 'bold';
+                        productClassDiv.style.fontSize = '1.2rem';
+                        productClassDiv.style.color = '#2ecc71';
+                    } else if (mode === 'fruit') {
+                        fruitQualityDiv.innerHTML = "";
+                        data.detections.forEach(fruit => {
+                            let freshness = fruit.confidence * 100;
+                            let quality = freshness > 70 ? "Good" : "Bad";
+                            let fruitDiv = document.createElement('div');
+                            fruitDiv.innerHTML = `
+                                <h3>${fruit.class}</h3>
+                                <p>Freshness Index: ${freshness.toFixed(2)}%</p>
+                                <p>Quality: ${quality}</p>
+                            `;
+                            fruitQualityDiv.appendChild(fruitDiv);
+                        });
+                    }
+
+                }
+            } catch (error) {
+                console.error('Error during detection:', error);
+                alert('An error occurred. Please try again.');
+                processingSection.style.display = 'none';
+                uploadSection.style.display = 'block'; // Show the upload form again
+            }
+        });
+    </script>
+</body>
+
+</html>
