@@ -15,6 +15,13 @@ import sqlite3
 
 from database import DB_PATH, init_db, log_scan, get_history, get_trend_data
 from alerts import check_alerts
+from config import (
+    EXPECTED_SHELF_SLOTS,
+    YOLO_CONFIDENCE_THRESHOLD,
+    PRODUCT_MODEL_PATH,
+    QUALITY_MODEL_PATH,
+    QUALITY_CLASSIFIER_PATH,
+)
 
 app = Flask(__name__)
 
@@ -22,8 +29,8 @@ app = Flask(__name__)
 # Load YOLO models
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 try:
-    model_product = YOLO('best.pt').to(device)
-    model_fruit = YOLO('Quality.pt').to(device)
+    model_product = YOLO(PRODUCT_MODEL_PATH).to(device)
+    model_fruit = YOLO(QUALITY_MODEL_PATH).to(device)
 except Exception as e:
     print(f"Error loading YOLO models: {e}")
     exit()
@@ -37,7 +44,7 @@ except Exception as e:
 
 # Quality classifier
 try:
-    with open('Quality.pkl', 'rb') as f:
+    with open(QUALITY_CLASSIFIER_PATH, 'rb') as f:
         quality_classifier = pickle.load(f)
 except Exception as e:
     print(f"Warning: failed to load Quality.pkl: {e}")
@@ -85,7 +92,7 @@ def detect_objects(image, model, mode):
             labels = result.boxes.cls.cpu().numpy()
             confidences = result.boxes.conf.cpu().numpy()
             for box, label, confidence in zip(boxes, labels, confidences):
-                if confidence <= 0.5:
+                if confidence <= YOLO_CONFIDENCE_THRESHOLD:
                     continue
 
                 x1, y1, x2, y2 = box
@@ -229,12 +236,11 @@ def detect():
                 print(f"Error during OCR: {ocr_error}")
                 ocr_text = None
 
-        expected_slots = 8
         product_count = len(detections)
         avg_freshness = round(
             float(np.mean([d["freshness_score"] for d in detections])) if detections else 0.0, 2
         )
-        shelf_gaps = max(0, expected_slots - len(detections))
+        shelf_gaps = max(0, EXPECTED_SHELF_SLOTS - len(detections))
 
         alerts = check_alerts(detections, mode)
         flagged_count = len(alerts)
