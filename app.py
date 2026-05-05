@@ -57,6 +57,19 @@ init_db()
 buffers = {}
 
 
+def _measure_text(draw, text, font):
+    # Pillow >=10 removed textsize; textbbox is the stable replacement.
+    try:
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        return max(0, right - left), max(0, bottom - top)
+    except Exception:
+        # Keep a safe fallback for older Pillow builds.
+        try:
+            return draw.textsize(text, font=font)
+        except Exception:
+            return (0, 0)
+
+
 def _predict_freshness_score(crop_np, fallback_confidence):
     fallback_score = int(max(0, min(100, fallback_confidence * 100)))
     if quality_classifier is None or crop_np.size == 0:
@@ -143,8 +156,9 @@ def draw_bounding_boxes(image, detections):
             if freshness is not None:
                 label = f"{label} | F:{freshness}"
             try:
-                text_size = draw.textsize(label, font=font)
-                draw.text((x1, y1 - text_size[1] - 5), label, fill="red", font=font)
+                text_width, text_height = _measure_text(draw, label, font)
+                text_y = max(0, y1 - text_height - 5)
+                draw.text((x1, text_y), label, fill="red", font=font)
             except Exception as e:
                 print(f"Error drawing text: {e}")
 
@@ -200,6 +214,16 @@ def _get_last_scan_alerts():
 @app.route('/')
 def home():
     return render_template('index.html')
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return "", 204
+
+
+@app.route('/.well-known/appspecific/com.chrome.devtools.json')
+def chrome_devtools_probe():
+    return "", 204
 
 
 @app.route('/detect', methods=['POST'])
